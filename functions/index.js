@@ -155,6 +155,7 @@ exports.order = functions.https.onRequest(async (req, res) => {
 function orderJson(doc) {
     var date = new Date(doc.dateTime.seconds * 1000)
     date = date.toISOString();
+    var discount;
     var items = [];
     for (let index = 0; index < doc.items.length; index++) {
         items.push({
@@ -162,12 +163,15 @@ function orderJson(doc) {
             "name": doc.items[index].itemName,
             "product_id": doc.items[index].itemId,
             "quantity": doc.items[index].quantity,
-            "subtotal": parseFloat(doc.items[index].unitPrice * doc.items[index].quantity).toFixed(2).toString(),
-            "total": parseFloat(doc.items[index].unitPrice * doc.items[index].quantity).toFixed(2).toString(),
+            "subtotal": parseFloat(doc.items[index].total).toFixed(2).toString(),
+            "total": parseFloat(doc.items[index].total).toFixed(2).toString(),
             "price": doc.items[index].unitPrice,
         })
 
     }
+    // for(let index = 0; index<doc.packages.length; index++){
+
+    // }
     return {
         "id": parseInt(doc.orderId),
         "parent_id": 0,
