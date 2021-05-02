@@ -1,12 +1,9 @@
 const functions = require('firebase-functions');
-exports.freshgorder = require('./freshgorder');
 const admin = require('firebase-admin');
-// The Firebase Admin SDK to access Cloud Firestore.
 admin.initializeApp();
 const db = admin.firestore()
-// // Create and Deploy Your First Cloud Functions
-// // https://firebase.google.com/docs/functions/write-firebase-functions
-//
+exports.freshgorder = require('./freshgorder');
+exports.notifications = require('./notifications')
 function auth(query) {
 
 }
@@ -155,23 +152,29 @@ exports.order = functions.https.onRequest(async (req, res) => {
 function orderJson(doc) {
     var date = new Date(doc.dateTime.seconds * 1000)
     date = date.toISOString();
-    var discount;
+    var discount = 0;
     var items = [];
-    for (let index = 0; index < doc.items.length; index++) {
+    const pushFn = (item) => {
         items.push({
-            "id": parseInt(doc.items[index].itemId),
-            "name": doc.items[index].itemName,
-            "product_id": doc.items[index].itemId,
-            "quantity": doc.items[index].quantity,
-            "subtotal": parseFloat(doc.items[index].total).toFixed(2).toString(),
-            "total": parseFloat(doc.items[index].total).toFixed(2).toString(),
-            "price": doc.items[index].unitPrice,
+            "id": parseInt(item.itemId),
+            "name": item.itemName,
+            "product_id": item.itemId,
+            "quantity": item.quantity,
+            "subtotal": parseFloat(item.total).toFixed(2).toString(),
+            "total": parseFloat(item.total).toFixed(2).toString(),
+            "price": item.unitPrice,
         })
-
     }
-    // for(let index = 0; index<doc.packages.length; index++){
-
-    // }
+    for (let index = 0; index < doc.items.length; index++) {
+        pushFn(doc.items[index])
+    }
+    for (let i = 0; i < doc.packages.length; i++) {
+        discount += doc.packages[i].quantity *
+            (doc.packages[i].total - doc.packages[i].price)
+        for (let j = 0; j < doc.packages[i].items.length; j++) {
+            pushFn(doc.packages[i].items[j])
+        }
+    }
     return {
         "id": parseInt(doc.orderId),
         "parent_id": 0,
@@ -180,7 +183,7 @@ function orderJson(doc) {
         "version": "1.0",
         "status": doc.status,
         "date_created": date,
-        "discount_total": "0.00",
+        "discount_total": parseFloat(discount).toFixed(2).toString(),
         "shipping_total": "0.00",
         "total": parseFloat(doc.totalCost).toFixed(2).toString(),
         "customer_id": 0,
