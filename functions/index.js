@@ -11,12 +11,55 @@ async function getID(req, docRef) {
     if (req.body['id'] === 0) {
         var doc = await docRef.get();
         const id = doc.get('nextId')
-        docRef.set({
+        docRef.update({
             nextId: id + 1,
         })
         return id.toString();
     } else {
         return req.body['id'].toString();
+    }
+}
+async function getOrderID() {
+    const docRef = db.collection("lengths").doc("order");
+    var id = null;
+    const doc = await docRef.get()
+    id = doc.get('nextId');
+    await docRef.update({
+        nextId: id + 1
+    })
+    return id.toString();
+}
+
+async function getOrderDoc(orderz, doc, status) {
+    console.log(2)
+    var newOrderId = null
+    var doc2;
+    var doc3;
+    if (!doc.get('orderId')) {
+        newOrderId = await getOrderID()
+        console.log(newOrderId)
+        doc3 = orderz.doc(doc.id).update({
+            orderId: newOrderId,
+        }).then(async () => {
+            doc2 = await orderz.doc(doc.id).get()
+            return doc2;
+            // if (!status.includes(doc2.get('status'))) {
+            //     doc2 =null;
+            // } else return null
+        }).catch((e) => {
+            console.log(e)
+            console.log(`error in updating orderId field of ${doc.id}`)
+        })
+        if (status.includes(doc3.get(status))) {
+            return doc3
+        } else {
+            return null
+        }
+    } else {
+        if (status.includes(doc.get('status'))) {
+            doc3 = doc
+            return doc3
+        } else return null
     }
 }
 function createSearchArray(item) {
@@ -47,7 +90,7 @@ exports.additems = functions.https.onRequest(async (req, res) => {
             searchArray: searchArray,
             uploadedOn: new Date(),
         })
-        res.status(200).json({ id: parseInt(id), name: req.body['name'], slug: req.body['slug'] });
+        res.status(200).json({ "id": parseInt(id), "type": "simple", "name": req.body['name'], "slug": req.body['slug'] });
     } catch (error) {
         res.status(500).json({ "status": "error", "error": error.toString() });
     }
@@ -137,6 +180,7 @@ exports.order = functions.https.onRequest(async (req, res) => {
     const id = params[params.length - 1];
     try {
         const order = await db.collection('orders').where("orderId", "==", id).get();
+
         if (order.docs.length) {
             const json = orderJson(order.docs[0].data())
             res.status(200).json(json)
@@ -146,8 +190,8 @@ exports.order = functions.https.onRequest(async (req, res) => {
     } catch (error) {
         res.status(500).json({ "id": id, "error": error.toString() })
     }
-
 })
+
 
 function orderJson(doc) {
     var date = new Date(doc.dateTime.seconds * 1000)
@@ -159,33 +203,44 @@ function orderJson(doc) {
             "id": parseInt(item.itemId),
             "name": item.itemName,
             "product_id": item.itemId,
+            "variation_id": 0,
             "quantity": item.quantity,
             "subtotal": parseFloat(item.total).toFixed(2).toString(),
             "total": parseFloat(item.total).toFixed(2).toString(),
+            "meta_data": [],
+            "sku": "",
             "price": item.unitPrice,
         })
     }
-    for (let index = 0; index < doc.items.length; index++) {
-        pushFn(doc.items[index])
-    }
-    for (let i = 0; i < doc.packages.length; i++) {
-        discount += doc.packages[i].quantity *
-            (doc.packages[i].total - doc.packages[i].price)
-        for (let j = 0; j < doc.packages[i].items.length; j++) {
-            pushFn(doc.packages[i].items[j])
+    if (doc.items) {
+        for (let index = 0; index < doc.items.length; index++) {
+            pushFn(doc.items[index])
+        }
+    } else {
+        for (let i = 0; i < doc.packages.length; i++) {
+            discount += doc.packages[i].quantity *
+                (doc.packages[i].total - doc.packages[i].price)
+            for (let j = 0; j < doc.packages[i].items.length; j++) {
+                pushFn(doc.packages[i].items[j])
+            }
         }
     }
     return {
         "id": parseInt(doc.orderId),
         "parent_id": 0,
         "number": doc.orderId,
+        "order_key": "wc_order_58d2d042d1d",
         "created_via": "REST-api",
-        "version": "1.0",
+        "version": "1.0.0",
         "status": doc.status,
         "date_created": date,
+        "date_created_gmt": date,
+        "date_modified": date,
+        "date_modified_gmt": date,
         "discount_total": parseFloat(discount).toFixed(2).toString(),
         "shipping_total": "0.00",
         "total": parseFloat(doc.totalCost).toFixed(2).toString(),
+        "prices_include_tax": false,
         "customer_id": 0,
         "customer_note": "",
         "billing": {
@@ -214,8 +269,30 @@ function orderJson(doc) {
             "email": "qqeq@mail.com",
             "Phone": doc.shipping.phNumber || 9999999999,
         },
+        "payment_method": "razorpay",
+        "payment_method_title": "Razor pay",
+        "transaction_id": "",
+        "date_paid": date,
+        "date_paid_gmt": date,
+        "date_completed": null,
+        "date_completed_gmt": null,
         "line_items": items
     }
+}
+
+
+async function orderIdSet(req, docref) {
+    if (req.body['id'] === 0) {
+        var doc = await docRef.get();
+        const id = doc.get('nextId')
+        docRef.set({
+            nextId: id + 1,
+        })
+        return id.toString();
+    } else {
+        return req.body['id'].toString();
+    }
+
 }
 //-----------------------------------------------------------------------------------------------------------------------------------------//
 exports.orders = functions.https.onRequest(async (req, res) => {
@@ -224,32 +301,62 @@ exports.orders = functions.https.onRequest(async (req, res) => {
         const limit = parseInt(req.query.per_page) || 100;
         const page = parseInt(req.query.page) || 1;
         const status = req.query.status ? req.query.status.split(',') : [];
+        var test = async (doc) => {
+            if (!doc.get('orderId')) {
+                getOrderID().then(id => {
+                    console.log("then1");
+
+                    return orderz.doc(doc.id).update({
+                        orderId: id,
+                    })
+                }).then((result) => {
+                    console.log(result);
+
+                    return orderz.doc(doc.id).get()
+                }).then(doc2 => {
+                    console.log(doc2.data());
+
+                    console.log("print2");
+                    return arr1.push(doc2)
+                }).catch(() => {
+                    console.log('error in loop')
+                })
+            } else {
+                arr1.push(doc)
+            }
+        }
+        var arr1 = [];
         try {
             const orderz = db.collection('orders')
             var order = await orderz.where("dateTime", ">=", date).orderBy("dateTime").get()
-            var arr1 = []
             if (status.length) {
-                order.docs.forEach(doc => {
-                    if (status.includes(doc.get('status'))) {
+                /* eslint-disable no-await-in-loop */
+                for (let doc of order.docs) {
+                    if (!doc.get('orderId')) {
+                        let id = await getOrderID();
+                        await orderz.doc(doc.id).update({ orderId: id });
+                        let doc1 = await orderz.doc(doc.id).get();
+                        arr1.push(doc1);
+                    } else {
                         arr1.push(doc)
                     }
-                });
+                }
+                /* eslint-enable no-await-in-loop */
+                var arr2 = [];
+                arr2 = arr1.slice((page - 1) * limit, page * limit)
+                if (arr2.length) {
+                    var json = []
+                    arr2.forEach(doc => {
+                        json.push(orderJson(doc.data()))
+                    })
+                    res.status(200).json(json)
+                } else {
+                    res.status(404).json({ "date": date.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }), "error": "no documents in given time period" })
+                }
             } else {
-                order.docs.forEach(doc => {
-                    arr1.push(doc)
-                })
+                res.status(404).json({ "date": date.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }), "error": "no status given" })
             }
-            var arr2 = [];
-            arr2 = arr1.slice((page - 1) * limit, page * limit)
-            if (arr2.length) {
-                var json = []
-                arr2.forEach(doc => {
-                    json.push(orderJson(doc.data()))
-                })
-                res.status(200).json(json)
-            } else {
-                res.status(404).json({ "date": date.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }), "error": "no documents in given time period" })
-            }
+
         } catch (error) {
             res.status(500).json({ "date": date.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }), "error": error.toString() })
         }
