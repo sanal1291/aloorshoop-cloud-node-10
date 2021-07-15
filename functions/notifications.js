@@ -3,9 +3,9 @@ const admin = require('firebase-admin');
 const db = admin.firestore()
 
 exports.orderStatus = functions.https.onCall(async (data, context) => {
-    var order = await db.collection('orders').doc(data.orderId)
-    var userId = await (await order.get()).get('userId');
-    var user = await (await db.collection('users').doc(userId).get()).get('token')
+    var order = db.collection('orders').doc(data.orderId)
+    var userId = (await order.get()).get('userId');
+    var user = (await db.collection('users').doc(userId).get()).get('token')
     return order.update({ livestatus: data.status }).then(() => {
         var message = {
             notification: {

@@ -4,9 +4,24 @@ admin.initializeApp();
 const db = admin.firestore()
 exports.freshgorder = require('./freshgorder');
 exports.notifications = require('./notifications')
-function auth(query) {
 
+
+async function auth(query, res) {
+    // // eslint-disable-next-line no-constant-condition
+    // if (true) {
+    //     return true
+    // }
+    let doc = await db.collection('lengths').doc('keys').get()
+    let ck = doc.get('consumer_key')
+    let cs = doc.get('consumer_secret')
+    if (query.consumer_secret === cs && query.consumer_key === ck) {
+        return true
+    } else {
+        res.status(500).json({ "status": "error", "error": "authentication failed" })
+        return false;
+    }
 }
+
 async function getID(req, docRef) {
     if (req.body['id'] === 0) {
         var doc = await docRef.get();
@@ -30,38 +45,6 @@ async function getOrderID() {
     return id.toString();
 }
 
-async function getOrderDoc(orderz, doc, status) {
-    console.log(2)
-    var newOrderId = null
-    var doc2;
-    var doc3;
-    if (!doc.get('orderId')) {
-        newOrderId = await getOrderID()
-        console.log(newOrderId)
-        doc3 = orderz.doc(doc.id).update({
-            orderId: newOrderId,
-        }).then(async () => {
-            doc2 = await orderz.doc(doc.id).get()
-            return doc2;
-            // if (!status.includes(doc2.get('status'))) {
-            //     doc2 =null;
-            // } else return null
-        }).catch((e) => {
-            console.log(e)
-            console.log(`error in updating orderId field of ${doc.id}`)
-        })
-        if (status.includes(doc3.get(status))) {
-            return doc3
-        } else {
-            return null
-        }
-    } else {
-        if (status.includes(doc.get('status'))) {
-            doc3 = doc
-            return doc3
-        } else return null
-    }
-}
 function createSearchArray(item) {
     const name = item.toLowerCase().trim();
     var arr = [];
@@ -72,19 +55,21 @@ function createSearchArray(item) {
 }
 //---------------------------------------------------------------------------------------------------------------------//
 exports.additems = functions.https.onRequest(async (req, res) => {
+    if (!await auth(req.query, res)) return
     var indiItem = db.collection("independentItems");
     const docRef = db.collection("lengths").doc("indiItem");
     try {
         const id = await getID(req, docRef)
         const searchArray = createSearchArray(req.body['name'])
         await indiItem.doc(id).set({
-            id: req.body['id'],
+            id: id,
             name: req.body['name'],
+            displayNames: { en: req.body['name'] },
             slug: req.body['slug'],
             categories: req.body['categories'],
             tags: req.body['tags'],
             stock_quantity: req.body['stock_quantity'] || 0,
-            reqularPrice: req.body['regular_price'],
+            regularPrice: req.body['regular_price'],
             salePrice: req.body['sale_price'],
             price: parseInt(req.body['sale_price']),
             searchArray: searchArray,
@@ -97,6 +82,7 @@ exports.additems = functions.https.onRequest(async (req, res) => {
 });
 //-------------------------------------------------------------------------------------------------------------------------//
 exports.categories = functions.https.onRequest(async (req, res) => {
+    if (!await auth(req.query, res)) return
     const categories = db.collection('Categories')
     const docRef = db.collection("lengths").doc("category");
     var body = req.body
@@ -104,7 +90,7 @@ exports.categories = functions.https.onRequest(async (req, res) => {
     const searchArray = createSearchArray(body['name'])
     try {
         await categories.doc(id).set({
-            id: body['id'],
+            id: id,
             displayNames: { en: body['name'] },
             slug: body['slug'],
             parent: body['parent'],
@@ -123,14 +109,14 @@ exports.categories = functions.https.onRequest(async (req, res) => {
 })
 //----------------------------------------------------------------------------------------------------------------------//
 exports.manufacturer = functions.https.onRequest(async (req, res) => {
+    if (!await auth(req.query, res)) return
     const manufacturer = db.collection('manufacturer')
     const docRef = db.collection("lengths").doc("tag");
-
     try {
         const body = req.body;
         const id = await getID(req, docRef)
         await manufacturer.doc(id).set({
-            id: body['id'],
+            id: id,
             name: body['name'],
             slug: body['slug'],
             uploadedOn: new Date(),
@@ -142,6 +128,7 @@ exports.manufacturer = functions.https.onRequest(async (req, res) => {
 })
 
 exports.update = functions.https.onRequest(async (req, res) => {
+    if (!await auth(req.query, res)) return
     const indiItem = db.collection('independentItems')
     var errorMap = {};
     var updateItem = item => {
@@ -176,6 +163,7 @@ exports.update = functions.https.onRequest(async (req, res) => {
 
 //----------------------------------------------------------------------------------------------------------------------------------------//
 exports.order = functions.https.onRequest(async (req, res) => {
+    if (!await auth(req.query, res)) return
     const params = req.params[0].split("/")
     const id = params[params.length - 1];
     try {
@@ -195,14 +183,17 @@ exports.order = functions.https.onRequest(async (req, res) => {
 
 function orderJson(doc) {
     var date = new Date(doc.dateTime.seconds * 1000)
-    date = date.toISOString();
+    var tzoffset = (new Date()).getTimezoneOffset() * 60000;
+    var localISOTime = (new Date(date - tzoffset)).toISOString().slice(0, -5);
+    date = date.toISOString().slice(0, -5);
+    console.log(date)
     var discount = 0;
     var items = [];
     const pushFn = (item) => {
         items.push({
             "id": parseInt(item.itemId),
-            "name": item.itemName,
-            "product_id": item.itemId,
+            "name": item.itemName['en'],
+            "product_id": parseInt(item.itemId),
             "variation_id": 0,
             "quantity": item.quantity,
             "subtotal": parseFloat(item.total).toFixed(2).toString(),
@@ -233,12 +224,16 @@ function orderJson(doc) {
         "created_via": "REST-api",
         "version": "1.0.0",
         "status": doc.status,
-        "date_created": date,
+        "currency": "INR",
+        "date_created": localISOTime,
         "date_created_gmt": date,
-        "date_modified": date,
+        "date_modified": localISOTime,
         "date_modified_gmt": date,
         "discount_total": parseFloat(discount).toFixed(2).toString(),
+        // "discount_tax":"0.00",
         "shipping_total": "0.00",
+        // "shipping_tax":"0.00",
+        // "cart_tax":"0.00",
         "total": parseFloat(doc.totalCost).toFixed(2).toString(),
         "prices_include_tax": false,
         "customer_id": 0,
@@ -254,7 +249,7 @@ function orderJson(doc) {
             "postcode": 111111,
             "country": "India",
             "email": "qqeq@mail.com",
-            "Phone": doc.shipping.phNumber || 9999999999,
+            "Phone": doc.shipping.phNumber.toString() || "9999999999",
         },
         "shipping": {
             "first_name": doc.shipping.first_name,
@@ -272,59 +267,26 @@ function orderJson(doc) {
         "payment_method": "razorpay",
         "payment_method_title": "Razor pay",
         "transaction_id": "",
-        "date_paid": date,
+        "date_paid": localISOTime,
         "date_paid_gmt": date,
         "date_completed": null,
         "date_completed_gmt": null,
-        "line_items": items
+        "line_items": items,
+        "shipping_lines": [],
+        "fee_lines": [],
+        "coupon_lines": []
     }
 }
 
 
-async function orderIdSet(req, docref) {
-    if (req.body['id'] === 0) {
-        var doc = await docRef.get();
-        const id = doc.get('nextId')
-        docRef.set({
-            nextId: id + 1,
-        })
-        return id.toString();
-    } else {
-        return req.body['id'].toString();
-    }
-
-}
 //-----------------------------------------------------------------------------------------------------------------------------------------//
 exports.orders = functions.https.onRequest(async (req, res) => {
+    if (!await auth(req.query, res)) return
     try {
         const date = new Date(Date.parse(req.query.after)) || (() => { throw new Error("date not given") })();
         const limit = parseInt(req.query.per_page) || 100;
         const page = parseInt(req.query.page) || 1;
         const status = req.query.status ? req.query.status.split(',') : [];
-        var test = async (doc) => {
-            if (!doc.get('orderId')) {
-                getOrderID().then(id => {
-                    console.log("then1");
-
-                    return orderz.doc(doc.id).update({
-                        orderId: id,
-                    })
-                }).then((result) => {
-                    console.log(result);
-
-                    return orderz.doc(doc.id).get()
-                }).then(doc2 => {
-                    console.log(doc2.data());
-
-                    console.log("print2");
-                    return arr1.push(doc2)
-                }).catch(() => {
-                    console.log('error in loop')
-                })
-            } else {
-                arr1.push(doc)
-            }
-        }
         var arr1 = [];
         try {
             const orderz = db.collection('orders')
