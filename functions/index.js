@@ -56,13 +56,13 @@ function createSearchArray(item) {
 //---------------------------------------------------------------------------------------------------------------------//
 exports.additems = functions.https.onRequest(async (req, res) => {
     if (!await auth(req.query, res)) return
-    var indiItem = db.collection("independentItems");
     const docRef = db.collection("lengths").doc("indiItem");
+    const id = await getID(req, docRef)
+    var indiItem = db.collection("independentItems").doc(id)
+    const searchArray = createSearchArray(req.body['name'])
     try {
-        const id = await getID(req, docRef)
-        const searchArray = createSearchArray(req.body['name'])
-        await indiItem.doc(id).set({
-            id: id,
+        await indiItem.set({
+            id: parseInt(id),
             name: req.body['name'],
             displayNames: { en: req.body['name'] },
             slug: req.body['slug'],
@@ -83,14 +83,14 @@ exports.additems = functions.https.onRequest(async (req, res) => {
 //-------------------------------------------------------------------------------------------------------------------------//
 exports.categories = functions.https.onRequest(async (req, res) => {
     if (!await auth(req.query, res)) return
-    const categories = db.collection('Categories')
     const docRef = db.collection("lengths").doc("category");
     var body = req.body
     const id = await getID(req, docRef);
+    const categories = db.collection('Categories').doc(id)
     const searchArray = createSearchArray(body['name'])
     try {
-        await categories.doc(id).set({
-            id: id,
+        await categories.set({
+            id: parseInt(id),
             displayNames: { en: body['name'] },
             slug: body['slug'],
             parent: body['parent'],
@@ -110,13 +110,13 @@ exports.categories = functions.https.onRequest(async (req, res) => {
 //----------------------------------------------------------------------------------------------------------------------//
 exports.manufacturer = functions.https.onRequest(async (req, res) => {
     if (!await auth(req.query, res)) return
-    const manufacturer = db.collection('manufacturer')
     const docRef = db.collection("lengths").doc("tag");
+    const id = await getID(req, docRef)
+    const manufacturer = db.collection('manufacturer').doc(id)
     try {
         const body = req.body;
-        const id = await getID(req, docRef)
-        await manufacturer.doc(id).set({
-            id: id,
+        await manufacturer.set({
+            id: parseInt(id),
             name: body['name'],
             slug: body['slug'],
             uploadedOn: new Date(),
