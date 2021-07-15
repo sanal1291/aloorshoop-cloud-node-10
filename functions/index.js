@@ -62,7 +62,6 @@ exports.additems = functions.https.onRequest(async (req, res) => {
     const searchArray = createSearchArray(req.body['name'])
     try {
         await indiItem.set({
-            id: parseInt(id),
             name: req.body['name'],
             displayNames: { en: req.body['name'] },
             slug: req.body['slug'],
@@ -90,7 +89,6 @@ exports.categories = functions.https.onRequest(async (req, res) => {
     const searchArray = createSearchArray(body['name'])
     try {
         await categories.set({
-            id: parseInt(id),
             displayNames: { en: body['name'] },
             slug: body['slug'],
             parent: body['parent'],
@@ -116,7 +114,6 @@ exports.manufacturer = functions.https.onRequest(async (req, res) => {
     try {
         const body = req.body;
         await manufacturer.set({
-            id: parseInt(id),
             name: body['name'],
             slug: body['slug'],
             uploadedOn: new Date(),
