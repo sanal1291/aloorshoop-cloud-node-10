@@ -180,10 +180,9 @@ exports.order = functions.https.onRequest(async (req, res) => {
 
 function orderJson(doc) {
     var date = new Date(doc.dateTime.seconds * 1000)
-    var tzoffset = (new Date()).getTimezoneOffset() * 60000;
+    var tzoffset = -19800000
     var localISOTime = (new Date(date - tzoffset)).toISOString().slice(0, -5);
     date = date.toISOString().slice(0, -5);
-    console.log(date)
     var discount = 0;
     var items = [];
     const pushFn = (item) => {
@@ -217,11 +216,11 @@ function orderJson(doc) {
         "id": parseInt(doc.orderId),
         "parent_id": 0,
         "number": doc.orderId,
-        "order_key": "wc_order_58d2d042d1d",
+        "order_key": "wc_order_58d2d042d1dde",
         "created_via": "REST-api",
         "version": "1.0.0",
         "status": doc.status,
-        "currency": "INR",
+        // "currency": "INR",
         "date_created": localISOTime,
         "date_created_gmt": date,
         "date_modified": localISOTime,
@@ -243,10 +242,10 @@ function orderJson(doc) {
             "address_2": doc.shipping.locality,
             "city": doc.shipping.area,
             "state": "Kerala",
-            "postcode": 111111,
+            "postcode": "111111",
             "country": "India",
             "email": "qqeq@mail.com",
-            "Phone": doc.shipping.phNumber.toString() || "9999999999",
+            "phone": doc.shipping.phNumber.toString() || "9999999999",
         },
         "shipping": {
             "first_name": doc.shipping.first_name,
@@ -256,10 +255,8 @@ function orderJson(doc) {
             "address_2": doc.shipping.locality,
             "city": doc.shipping.area,
             "state": "Kerala",
-            "postcode": 111111,
+            "postcode": "111111",
             "country": "India",
-            "email": "qqeq@mail.com",
-            "Phone": doc.shipping.phNumber || 9999999999,
         },
         "payment_method": "razorpay",
         "payment_method_title": "Razor pay",
@@ -269,7 +266,15 @@ function orderJson(doc) {
         "date_completed": null,
         "date_completed_gmt": null,
         "line_items": items,
-        "shipping_lines": [],
+        "shipping_lines": [{
+            "id": 317,
+            "method_title": "Flat Rate",
+            "method_id": "flat_rate",
+            "total": "00.00",
+            "total_tax": "0.00",
+            "taxes": [],
+            "meta_data": []
+        }],
         "fee_lines": [],
         "coupon_lines": []
     }
@@ -280,7 +285,7 @@ function orderJson(doc) {
 exports.orders = functions.https.onRequest(async (req, res) => {
     if (!await auth(req.query, res)) return
     try {
-        const date = new Date(Date.parse(req.query.after)) || (() => { throw new Error("date not given") })();
+        const date = new Date(Date.parse(req.query.after) + 19800000) || (() => { throw new Error("date not given") })();
         const limit = parseInt(req.query.per_page) || 100;
         const page = parseInt(req.query.page) || 1;
         const status = req.query.status ? req.query.status.split(',') : [];
